@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HRMS Bill Batch PDF Printer
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2
+// @version      1.0.3
 // @description  Fetches all bill report PDFs inside mainFrame, duplicates multi-copy reports, merges them in order, and triggers printing.
 // @author       You
 // @match        https://www.wbifms.gov.in/*
@@ -218,9 +218,31 @@
     // -------------------------------------------------------------------------
     // PDF validation & network fetching
     // -------------------------------------------------------------------------
-    function isPdfBytes(arrayBuffer) {
-        if (!arrayBuffer || arrayBuffer.byteLength < 5) return false;
-        const view = new Uint8Array(arrayBuffer, 0, Math.min(1024, arrayBuffer.byteLength));
+    function toLocalUint8Array(data) {
+        if (!data) {
+            throw new Error('Empty binary response');
+        }
+        if (data instanceof Uint8Array && data.buffer instanceof ArrayBuffer) {
+            return data;
+        }
+        // Convert cross-realm ArrayBuffer / TypedArray (e.g. from mainFrame.contentWindow.fetch)
+        // into a current-realm Uint8Array so pdf-lib's instanceof checks always pass.
+        if (ArrayBuffer.isView(data)) {
+            const view = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+            const copy = new Uint8Array(view.byteLength);
+            copy.set(view);
+            return copy;
+        }
+        const view = new Uint8Array(data);
+        const copy = new Uint8Array(view.byteLength);
+        copy.set(view);
+        return copy;
+    }
+
+    function isPdfBytes(data) {
+        if (!data || data.byteLength < 5) return false;
+        const bytes = toLocalUint8Array(data);
+        const view = bytes.subarray(0, Math.min(1024, bytes.byteLength));
         const header = String.fromCharCode(...view);
         return header.includes('%PDF-');
     }
@@ -245,7 +267,7 @@
                     throw new Error(`HTTP ${res.status} ${res.statusText}`);
                 }
                 const contentType = res.headers.get('content-type') || '';
-                const buf = await res.arrayBuffer();
+                const buf = toLocalUint8Array(await res.arrayBuffer());
                 return { buf, contentType, finalUrl: res.url || url };
             })
             .catch((fetchErr) => {
@@ -265,7 +287,7 @@
                             if (resp.status >= 200 && resp.status < 300) {
                                 const ctMatch = (resp.responseHeaders || '').match(/content-type:\s*([^\r\n]+)/i);
                                 resolve({
-                                    buf: resp.response,
+                                    buf: toLocalUint8Array(resp.response),
                                     contentType: ctMatch ? ctMatch[1] : '',
                                     finalUrl: resp.finalUrl || url,
                                 });
@@ -297,7 +319,7 @@
                 const raw = atob(b64Match[1].replace(/\s+/g, ''));
                 const bytes = new Uint8Array(raw.length);
                 for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-                if (isPdfBytes(bytes.buffer)) return bytes.buffer;
+                if (isPdfBytes(bytes)) return bytes;
             }
 
             // 2. Check for embedded iframe/embed/object pointing to PDF
@@ -559,6 +581,15 @@
     // -------------------------------------------------------------------------
     // Merge PDFs using pdf-lib (with copy duplication & optional duplex padding)
     // -------------------------------------------------------------------------
+    function uint8ToBase64(bytes) {
+        let binary = '';
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+        }
+        return btoa(binary);
+    }
+
     async function buildMergedPdf(fetchedItems, duplexPad) {
         if (typeof PDFLib === 'undefined') {
             throw new Error('pdf-lib failed to load. Check network/Tampermonkey @require cache.');
@@ -569,7 +600,17 @@
 
         for (const item of fetchedItems) {
             const { state, copies, pdfBytes } = item;
-            const srcDoc = await PDFLib.PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+            const localBytes = toLocalUint8Array(pdfBytes);
+            let srcDoc;
+            try {
+                srcDoc = await PDFLib.PDFDocument.load(localBytes, { ignoreEncryption: true });
+            } catch (loadErr) {
+                if (/must be of type/.test(String(loadErr && loadErr.message))) {
+                    srcDoc = await PDFLib.PDFDocument.load(uint8ToBase64(localBytes), { ignoreEncryption: true });
+                } else {
+                    throw loadErr;
+                }
+            }
             const pageIndices = srcDoc.getPageIndices();
             const pageCount = pageIndices.length;
 
