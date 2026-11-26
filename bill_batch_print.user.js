@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HRMS Bill Batch PDF Printer
 // @namespace    http://tampermonkey.net/
-// @version      1.1.1
+// @version      1.2.0
 // @description  Fetches HRMS bill report PDFs or date-range LOV bills inside mainFrame, merges them in memory, and triggers printing or Save As.
 // @author       You
 // @match        https://www.wbifms.gov.in/*
@@ -33,79 +33,136 @@
     const rootWin = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 
     // -------------------------------------------------------------------------
-    // Report definitions in exact print order with default copy counts
+    // Report profiles in exact print order with default copy counts
     // -------------------------------------------------------------------------
-    const REPORT_CONFIGS = [
-        {
-            key: 'tr_18',
-            label: 'TR 18 Details',
-            copies: 1,
-            selector: '#report_link_tr_18',
-            textMatch: 'TR 18 Details',
+    const REPORT_PROFILES = {
+        permanent: {
+            id: 'permanent',
+            label: 'Permanent Staff',
+            configs: [
+                {
+                    key: 'tr_18',
+                    label: 'TR 18 Details',
+                    copies: 1,
+                    selector: '#report_link_tr_18',
+                    textMatch: 'TR 18 Details',
+                },
+                {
+                    key: 'tr_10',
+                    label: 'TR 10 Details',
+                    copies: 1,
+                    selector: 'a[onclick*="openReport_tr_10"]',
+                    textMatch: 'TR 10 Details',
+                },
+                {
+                    key: 'tr_12',
+                    label: 'TR 12 Details',
+                    copies: 2,
+                    selector: 'a[onclick*="openReport_tr_12"]',
+                    textMatch: 'TR 12 Details',
+                },
+                {
+                    key: 'tr_46',
+                    label: 'TR 46 Details',
+                    copies: 2,
+                    selector: 'a[onclick*="openReport_tr_46"]',
+                    textMatch: 'TR 46 Details',
+                },
+                {
+                    key: 'tr_47',
+                    label: 'TR 47 Details',
+                    copies: 1,
+                    selector: 'a[onclick*="openReport_tr_47"]',
+                    textMatch: 'TR 47 Details',
+                },
+                {
+                    key: 'tr_53',
+                    label: 'TR 53 Details',
+                    copies: 1,
+                    selector: 'a[onclick*="openReport_tr_53"]',
+                    textMatch: 'TR 53 Details',
+                },
+                {
+                    key: 'tr_55',
+                    label: 'TR 55 Details',
+                    copies: 2,
+                    selector: 'a[onclick*="openReport_tr_55"]',
+                    textMatch: 'TR 55 Details',
+                },
+                {
+                    key: 'benf_list',
+                    label: 'Beneficiary List',
+                    copies: 1,
+                    selector: '#BENF_LIST_Ucm',
+                    textMatch: 'Benefically List',
+                },
+                {
+                    key: 'bill_wise_ss',
+                    label: 'Bill Wise Sanction Strength',
+                    copies: 1,
+                    selector: 'a[onclick*="openReport_bill_wise_ss"]',
+                    textMatch: 'Bill Wise Sanction Strength',
+                },
+            ],
         },
-        {
-            key: 'tr_10',
-            label: 'TR 10 Details',
-            copies: 1,
-            selector: 'a[onclick*="openReport_tr_10"]',
-            textMatch: 'TR 10 Details',
+        wage: {
+            id: 'wage',
+            label: 'Wage Staff',
+            configs: [
+                {
+                    key: 'tr_26',
+                    label: 'TR 26 Details',
+                    copies: 1,
+                    selector: 'a[onclick*="openReport_tr_26"]',
+                    textMatch: 'TR 26 Details',
+                },
+                {
+                    key: 'wages_inner_sheet',
+                    label: 'Inner Sheet',
+                    copies: 1,
+                    selector: 'a[onclick*="openReport_wagesInnerSheet"]',
+                    textMatch: 'Inner Sheet',
+                },
+                {
+                    key: 'tr_10',
+                    label: 'TR 10 Details',
+                    copies: 1,
+                    selector: 'a[onclick*="openReport_tr_10"]',
+                    textMatch: 'TR 10 Details',
+                },
+                {
+                    key: 'tr_12',
+                    label: 'TR 12 Details',
+                    copies: 2,
+                    selector: 'a[onclick*="openReport_tr_12"]',
+                    textMatch: 'TR 12 Details',
+                },
+                {
+                    key: 'benf_list',
+                    label: 'Beneficiary List',
+                    copies: 1,
+                    selector: '#BENF_LIST_Ucm',
+                    textMatch: 'Benefically List',
+                },
+                {
+                    key: 'attendance',
+                    label: 'Attendance Report',
+                    copies: 1,
+                    selector: 'a[onclick*="openReport_attendance"]',
+                    textMatch: 'Attendance Report',
+                },
+            ],
         },
-        {
-            key: 'tr_12',
-            label: 'TR 12 Details',
-            copies: 2,
-            selector: 'a[onclick*="openReport_tr_12"]',
-            textMatch: 'TR 12 Details',
-        },
-        {
-            key: 'tr_46',
-            label: 'TR 46 Details',
-            copies: 2,
-            selector: 'a[onclick*="openReport_tr_46"]',
-            textMatch: 'TR 46 Details',
-        },
-        {
-            key: 'tr_47',
-            label: 'TR 47 Details',
-            copies: 1,
-            selector: 'a[onclick*="openReport_tr_47"]',
-            textMatch: 'TR 47 Details',
-        },
-        {
-            key: 'tr_53',
-            label: 'TR 53 Details',
-            copies: 1,
-            selector: 'a[onclick*="openReport_tr_53"]',
-            textMatch: 'TR 53 Details',
-        },
-        {
-            key: 'tr_55',
-            label: 'TR 55 Details',
-            copies: 2,
-            selector: 'a[onclick*="openReport_tr_55"]',
-            textMatch: 'TR 55 Details',
-        },
-        {
-            key: 'benf_list',
-            label: 'Beneficiary List',
-            copies: 1,
-            selector: '#BENF_LIST_Ucm',
-            textMatch: 'Benefically List',
-        },
-        {
-            key: 'bill_wise_ss',
-            label: 'Bill Wise Sanction Strength',
-            copies: 1,
-            selector: 'a[onclick*="openReport_bill_wise_ss"]',
-            textMatch: 'Bill Wise Sanction Strength',
-        },
-    ];
+    };
+
+    const PROFILE_IDS = Object.keys(REPORT_PROFILES);
 
     const CAPTURE_TIMEOUT_MS = 20000;
     const LOV_LOAD_TIMEOUT_MS = 20000;
 
     let isBusy = false;
     let stopRequested = false;
+    let activeReportProfileId = 'permanent';
     let lastMergedBlobUrl = null;
     let lastPrintIframeBlobUrl = null;
     let printIframe = null;
@@ -116,15 +173,18 @@
     let lastLovSuggestedName = 'merged_bills.pdf';
     const lovPdfCache = new Map(); // key: refNo -> Uint8Array
 
-    const reportStates = REPORT_CONFIGS.map((cfg) => ({
-        ...cfg,
-        enabled: true,
-        found: false,
-        element: null,
-        targetWin: null,
-        status: 'Waiting',
-        statusType: 'muted', // muted | ok | working | err | warn
-    }));
+    const profileStates = {};
+    for (const profileId of PROFILE_IDS) {
+        profileStates[profileId] = REPORT_PROFILES[profileId].configs.map((cfg) => ({
+            ...cfg,
+            enabled: true,
+            found: false,
+            element: null,
+            targetWin: null,
+            status: 'Waiting',
+            statusType: 'muted', // muted | ok | working | err | warn
+        }));
+    }
 
     // -------------------------------------------------------------------------
     // General & Logging helpers
@@ -225,38 +285,47 @@
 
     function scanLinks(resetStatus = false) {
         const wins = getAccessibleWindows(rootWin);
-        let foundCount = 0;
+        let activeFoundCount = 0;
 
-        for (const st of reportStates) {
-            const wasFound = st.found;
-            st.found = false;
-            st.element = null;
-            st.targetWin = null;
+        for (const profileId of PROFILE_IDS) {
+            const states = profileStates[profileId];
+            let profileFoundCount = 0;
 
-            for (const w of wins) {
-                const el = findLinkInWindow(w, st);
-                if (el) {
-                    st.found = true;
-                    st.element = el;
-                    st.targetWin = w;
-                    foundCount++;
-                    break;
+            for (const st of states) {
+                const wasFound = st.found;
+                st.found = false;
+                st.element = null;
+                st.targetWin = null;
+
+                for (const w of wins) {
+                    const el = findLinkInWindow(w, st);
+                    if (el) {
+                        st.found = true;
+                        st.element = el;
+                        st.targetWin = w;
+                        profileFoundCount++;
+                        break;
+                    }
+                }
+
+                if (!isBusy) {
+                    const isBasicStatus =
+                        st.status === 'Waiting' || st.status === 'Found' || st.status === 'Not found';
+                    if (resetStatus || isBasicStatus || wasFound !== st.found) {
+                        st.status = st.found ? 'Found' : 'Not found';
+                        st.statusType = st.found ? 'ok' : 'muted';
+                    }
                 }
             }
 
-            if (!isBusy) {
-                const isBasicStatus =
-                    st.status === 'Waiting' || st.status === 'Found' || st.status === 'Not found';
-                if (resetStatus || isBasicStatus || wasFound !== st.found) {
-                    st.status = st.found ? 'Found' : 'Not found';
-                    st.statusType = st.found ? 'ok' : 'muted';
-                }
+            if (profileId === activeReportProfileId) {
+                activeFoundCount = profileFoundCount;
             }
         }
 
         updateDateRangeDetector();
-        updateUI(foundCount);
-        return foundCount;
+        updateUI();
+        return activeFoundCount;
     }
 
     function updateDateRangeDetector() {
@@ -602,11 +671,12 @@
     }
 
     // -------------------------------------------------------------------------
-    // Feature 1: HRMS Bill Reports (9-report workflow)
+    // Feature 1: HRMS Bill Reports (Permanent & Wage Staff workflows)
     // -------------------------------------------------------------------------
-    async function fetchAllSelectedPdfs() {
+    async function fetchAllSelectedPdfs(profileId) {
+        const states = profileStates[profileId] || [];
         const results = [];
-        for (const st of reportStates) {
+        for (const st of states) {
             if (!st.enabled) {
                 st.status = 'Skipped';
                 st.statusType = 'muted';
@@ -1336,17 +1406,17 @@
         });
     }
 
-    async function runMergedAction(mode) {
+    async function runMergedAction(mode, profileId) {
         if (isBusy) return;
         isBusy = true;
         setButtonsDisabled(true);
         scanLinks();
 
         try {
-            const duplexEl = document.getElementById('hrms-bp-duplex');
+            const duplexEl = document.getElementById(`hrms-bp-duplex-${profileId}`);
             const duplexPad = Boolean(duplexEl && duplexEl.checked);
-            log(`Starting batch (${mode}, duplexPad=${duplexPad})...`);
-            const fetched = await fetchAllSelectedPdfs();
+            log(`Starting ${profileId} batch (${mode}, duplexPad=${duplexPad})...`);
+            const fetched = await fetchAllSelectedPdfs(profileId);
 
             if (fetched.length === 0) {
                 alert('No PDFs could be fetched. Check the status/log in the Bill Printer panel.');
@@ -1364,7 +1434,7 @@
             if (mode === 'download') {
                 await saveMergedPdfWithPrompt(
                     mergedBytes,
-                    `bill_reports_${new Date().toISOString().slice(0, 10)}.pdf`
+                    `${profileId}_bill_reports_${new Date().toISOString().slice(0, 10)}.pdf`
                 );
             } else if (mode === 'tab') {
                 window.open(lastMergedBlobUrl, '_blank');
@@ -1381,15 +1451,15 @@
         }
     }
 
-    async function runSequentialPrint() {
+    async function runSequentialPrint(profileId) {
         if (isBusy) return;
         isBusy = true;
         setButtonsDisabled(true);
         scanLinks();
 
         try {
-            log('Starting sequential individual print...');
-            const fetched = await fetchAllSelectedPdfs();
+            log(`Starting sequential individual print (${profileId})...`);
+            const fetched = await fetchAllSelectedPdfs(profileId);
             if (fetched.length === 0) {
                 alert('No PDFs could be fetched. Check the log in the Bill Printer panel.');
                 return;
@@ -1774,14 +1844,79 @@
         }
     }
 
+    function buildReportPaneHtml(profileId, isActive) {
+        return `
+            <div class="hrms-bp-pane${isActive ? ' active' : ''}" id="hrms-bp-pane-${profileId}">
+                <table class="hrms-bp-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Report</th>
+                            <th>Copies</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="hrms-bp-rows-${profileId}"></tbody>
+                </table>
+                <label class="hrms-bp-opt">
+                    <input type="checkbox" id="hrms-bp-duplex-${profileId}" />
+                    Duplex padding (add blank page after odd-page copies)
+                </label>
+                <div class="hrms-bp-actions">
+                    <button class="hrms-bp-btn primary" id="hrms-bp-print-${profileId}">🖨️ Merge &amp; Print All</button>
+                    <button class="hrms-bp-btn" id="hrms-bp-download-${profileId}">💾 Save Merged PDF</button>
+                    <button class="hrms-bp-btn" id="hrms-bp-tab-${profileId}">📄 Open Merged in Tab</button>
+                    <button class="hrms-bp-btn" id="hrms-bp-seq-${profileId}">📑 Print One-by-One</button>
+                    <button class="hrms-bp-btn" id="hrms-bp-rescan-${profileId}">🔄 Rescan Links</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function wireReportPane(profileId) {
+        const states = profileStates[profileId];
+        const tbody = document.getElementById(`hrms-bp-rows-${profileId}`);
+        states.forEach((st, idx) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="checkbox" data-idx="${idx}" class="hrms-bp-chk" ${st.enabled ? 'checked' : ''} /></td>
+                <td>${escapeHtml(st.label)}</td>
+                <td><input type="number" min="0" max="20" value="${st.copies}" data-idx="${idx}" class="hrms-bp-copies" /></td>
+                <td><span class="hrms-bp-pill muted" id="hrms-bp-st-${profileId}-${idx}">Waiting</span></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        tbody.addEventListener('change', (e) => {
+            const idx = Number(e.target.dataset.idx);
+            if (!states[idx]) return;
+            if (e.target.classList.contains('hrms-bp-chk')) {
+                states[idx].enabled = e.target.checked;
+                updatePrintButtonLabel(profileId);
+            } else if (e.target.classList.contains('hrms-bp-copies')) {
+                states[idx].copies = Math.max(0, parseInt(e.target.value, 10) || 0);
+                updatePrintButtonLabel(profileId);
+            }
+        });
+
+        document.getElementById(`hrms-bp-print-${profileId}`).addEventListener('click', () => runMergedAction('print', profileId));
+        document.getElementById(`hrms-bp-download-${profileId}`).addEventListener('click', () => runMergedAction('download', profileId));
+        document.getElementById(`hrms-bp-tab-${profileId}`).addEventListener('click', () => runMergedAction('tab', profileId));
+        document.getElementById(`hrms-bp-seq-${profileId}`).addEventListener('click', () => runSequentialPrint(profileId));
+        document.getElementById(`hrms-bp-rescan-${profileId}`).addEventListener('click', () => scanLinks(true));
+
+        updatePrintButtonLabel(profileId);
+    }
+
     function createUI() {
         if (document.getElementById('hrms-bp-launcher')) return;
         injectStyles();
 
+        const initialTotal = profileStates[activeReportProfileId].length;
         const launcher = document.createElement('button');
         launcher.id = 'hrms-bp-launcher';
         launcher.title = 'Click to open, drag to move';
-        launcher.innerHTML = `<span>🖨️ Bill Print</span><span class="badge" id="hrms-bp-badge">0/${REPORT_CONFIGS.length}</span>`;
+        launcher.innerHTML = `<span>🖨️ Bill Print</span><span class="badge" id="hrms-bp-badge">0/${initialTotal}</span>`;
 
         let launcherWasDragged = false;
         makeDraggable(launcher, launcher, (moved) => {
@@ -1808,37 +1943,15 @@
                 <button id="hrms-bp-close" title="Close">&times;</button>
             </div>
             <div class="hrms-bp-tabs">
-                <button class="hrms-bp-tab active" data-tab="hrms">HRMS Reports</button>
+                <button class="hrms-bp-tab active" data-tab="permanent">Permanent Staff</button>
+                <button class="hrms-bp-tab" data-tab="wage">Wage Staff</button>
                 <button class="hrms-bp-tab" data-tab="daterange">Date-Range Bills</button>
             </div>
             <div class="hrms-bp-body">
-                <!-- TAB 1: Existing HRMS 9-Report Batch Printer -->
-                <div class="hrms-bp-pane active" id="hrms-bp-pane-hrms">
-                    <table class="hrms-bp-table">
-                        <thead>
-                            <tr>
-                                <th></th>
-                                <th>Report</th>
-                                <th>Copies</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="hrms-bp-rows"></tbody>
-                    </table>
-                    <label class="hrms-bp-opt">
-                        <input type="checkbox" id="hrms-bp-duplex" />
-                        Duplex padding (add blank page after odd-page copies)
-                    </label>
-                    <div class="hrms-bp-actions">
-                        <button class="hrms-bp-btn primary" id="hrms-bp-print">🖨️ Merge &amp; Print All</button>
-                        <button class="hrms-bp-btn" id="hrms-bp-download">💾 Save Merged PDF</button>
-                        <button class="hrms-bp-btn" id="hrms-bp-tab">📄 Open Merged in Tab</button>
-                        <button class="hrms-bp-btn" id="hrms-bp-seq">📑 Print One-by-One</button>
-                        <button class="hrms-bp-btn" id="hrms-bp-rescan">🔄 Rescan Links</button>
-                    </div>
-                </div>
+                ${buildReportPaneHtml('permanent', true)}
+                ${buildReportPaneHtml('wage', false)}
 
-                <!-- TAB 2: Date-Range LOV Bill Fetcher & Merger -->
+                <!-- TAB 3: Date-Range LOV Bill Fetcher & Merger -->
                 <div class="hrms-bp-pane" id="hrms-bp-pane-daterange">
                     <div class="hrms-bp-dr-bar">
                         <span><strong>LOV Bill Range</strong></span>
@@ -1903,37 +2016,22 @@
                 panel.querySelectorAll('.hrms-bp-tab').forEach((b) => b.classList.remove('active'));
                 panel.querySelectorAll('.hrms-bp-pane').forEach((p) => p.classList.remove('active'));
                 tabBtn.classList.add('active');
-                const targetPane = document.getElementById(`hrms-bp-pane-${tabBtn.dataset.tab}`);
+                const tabId = tabBtn.dataset.tab;
+                if (REPORT_PROFILES[tabId]) {
+                    activeReportProfileId = tabId;
+                }
+                const targetPane = document.getElementById(`hrms-bp-pane-${tabId}`);
                 if (targetPane) targetPane.classList.add('active');
                 scanLinks();
             });
         });
 
-        // Populate Tab 1 rows
-        const tbody = document.getElementById('hrms-bp-rows');
-        reportStates.forEach((st, idx) => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><input type="checkbox" data-idx="${idx}" class="hrms-bp-chk" ${st.enabled ? 'checked' : ''} /></td>
-                <td>${st.label}</td>
-                <td><input type="number" min="0" max="20" value="${st.copies}" data-idx="${idx}" class="hrms-bp-copies" /></td>
-                <td><span class="hrms-bp-pill muted" id="hrms-bp-st-${idx}">Waiting</span></td>
-            `;
-            tbody.appendChild(tr);
-        });
+        // Populate & wire Permanent + Wage Staff panes
+        for (const profileId of PROFILE_IDS) {
+            wireReportPane(profileId);
+        }
 
-        tbody.addEventListener('change', (e) => {
-            const idx = Number(e.target.dataset.idx);
-            if (e.target.classList.contains('hrms-bp-chk')) {
-                reportStates[idx].enabled = e.target.checked;
-                updatePrintButtonLabel();
-            } else if (e.target.classList.contains('hrms-bp-copies')) {
-                reportStates[idx].copies = Math.max(0, parseInt(e.target.value, 10) || 0);
-                updatePrintButtonLabel();
-            }
-        });
-
-        // Tab 2 row selection handlers
+        // Tab 3 row selection handlers
         document.getElementById('hrms-bp-dr-all').addEventListener('change', (e) => {
             const checked = e.target.checked;
             lovBills.forEach((b) => { b.selected = checked; });
@@ -1950,15 +2048,10 @@
             }
         });
 
-        // Wire buttons
+        // Wire panel close & Date-Range buttons
         document.getElementById('hrms-bp-close').addEventListener('click', () => {
             panel.classList.remove('open');
         });
-        document.getElementById('hrms-bp-print').addEventListener('click', () => runMergedAction('print'));
-        document.getElementById('hrms-bp-download').addEventListener('click', () => runMergedAction('download'));
-        document.getElementById('hrms-bp-tab').addEventListener('click', () => runMergedAction('tab'));
-        document.getElementById('hrms-bp-seq').addEventListener('click', () => runSequentialPrint());
-        document.getElementById('hrms-bp-rescan').addEventListener('click', () => scanLinks(true));
 
         document.getElementById('hrms-bp-dr-fetch').addEventListener('click', () => loadBillsFromDateRange());
         document.getElementById('hrms-bp-dr-run').addEventListener('click', () => runDateRangeBatch(false));
@@ -1972,16 +2065,16 @@
             await saveMergedPdfWithPrompt(lastLovMergedBytes, lastLovSuggestedName);
         });
 
-        updatePrintButtonLabel();
         updateDrButtons();
     }
 
-    function updatePrintButtonLabel() {
-        const totalCopies = reportStates.reduce(
+    function updatePrintButtonLabel(profileId) {
+        const states = profileStates[profileId] || [];
+        const totalCopies = states.reduce(
             (sum, st) => sum + (st.enabled && st.found ? (parseInt(st.copies, 10) || 0) : 0),
             0
         );
-        const btn = document.getElementById('hrms-bp-print');
+        const btn = document.getElementById(`hrms-bp-print-${profileId}`);
         if (btn) {
             btn.textContent = `🖨️ Merge & Print All (${totalCopies} ${totalCopies === 1 ? 'copy' : 'copies'})`;
         }
@@ -1993,26 +2086,26 @@
         });
     }
 
-    function updateUI(foundCountOverride) {
-        const foundCount =
-            typeof foundCountOverride === 'number'
-                ? foundCountOverride
-                : reportStates.filter((s) => s.found).length;
+    function updateUI() {
+        const activeStates = profileStates[activeReportProfileId] || [];
+        const foundCount = activeStates.filter((s) => s.found).length;
 
         const badge = document.getElementById('hrms-bp-badge');
         if (badge) {
-            badge.textContent = `${foundCount}/${REPORT_CONFIGS.length}`;
+            badge.textContent = `${foundCount}/${activeStates.length}`;
         }
 
-        reportStates.forEach((st, idx) => {
-            const pill = document.getElementById(`hrms-bp-st-${idx}`);
-            if (pill) {
-                pill.textContent = st.status;
-                pill.className = `hrms-bp-pill ${st.statusType}`;
-            }
-        });
-
-        updatePrintButtonLabel();
+        for (const profileId of PROFILE_IDS) {
+            const states = profileStates[profileId];
+            states.forEach((st, idx) => {
+                const pill = document.getElementById(`hrms-bp-st-${profileId}-${idx}`);
+                if (pill) {
+                    pill.textContent = st.status;
+                    pill.className = `hrms-bp-pill ${st.statusType}`;
+                }
+            });
+            updatePrintButtonLabel(profileId);
+        }
     }
 
     // -------------------------------------------------------------------------
